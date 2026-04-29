@@ -10,7 +10,6 @@
 <style>
 #map { height: 100vh; }
 
-/* 現在地ボタン */
 .locate-btn {
     position: absolute;
     top: 10px;
@@ -20,8 +19,8 @@
     padding: 8px 12px;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 14px;
 }
+
 </style>
 </head>
 <body>
@@ -31,18 +30,26 @@
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
+<!-- 判定用ライブラリ -->
+<script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+
 <script>
 
-// 地図初期位置（大阪）
+// 地図
 var map = L.map('map').setView([34.6937, 135.5023], 11);
 
-// 地図タイル
+// タイル
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-// DIDデータ読み込み（←ここ重要）
+// DIDデータ
+var didLayer;
+
 fetch('oosaka.geojson')
 .then(res => res.json())
 .then(data => {
+
+    didLayer = data;
+
     L.geoJSON(data, {
         style: {
             color: "red",
@@ -52,12 +59,11 @@ fetch('oosaka.geojson')
     }).addTo(map);
 });
 
-// 現在地ボタン処理
+// 現在地
 function goLocation(){
     map.locate({ setView: true, maxZoom: 16 });
 }
 
-// 現在地取得成功
 map.on('locationfound', function(e) {
     L.marker(e.latlng).addTo(map)
         .bindPopup("現在地")
@@ -68,9 +74,34 @@ map.on('locationfound', function(e) {
     }).addTo(map);
 });
 
-// エラー
 map.on('locationerror', function(e) {
     alert("位置情報が取得できません");
+});
+
+// クリック判定
+map.on('click', function(e) {
+
+    if (!didLayer) {
+        alert("データ読み込み中");
+        return;
+    }
+
+    var point = turf.point([e.latlng.lng, e.latlng.lat]);
+
+    var inside = false;
+
+    didLayer.features.forEach(function(feature) {
+        if (turf.booleanPointInPolygon(point, feature)) {
+            inside = true;
+        }
+    });
+
+    if (inside) {
+        alert("ここは飛行NG（DID内）");
+    } else {
+        alert("ここは飛行OK（DID外）");
+    }
+
 });
 
 </script>
