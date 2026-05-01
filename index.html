@@ -15,7 +15,7 @@ body { margin:0; font-family:sans-serif; }
 #infoBtn, #locateBtn {
     position:absolute;
     z-index:1000;
-    background:rgba(255,255,255,0.8);
+    background:rgba(255,255,255,0.85);
     backdrop-filter:blur(10px);
     border-radius:10px;
     border:1px solid rgba(0,0,0,0.1);
@@ -32,21 +32,38 @@ body { margin:0; font-family:sans-serif; }
     padding:8px 12px;
 }
 
+/* 検索 */
+#searchBox {
+    position:absolute;
+    top:12px;
+    left:12px;
+    z-index:1000;
+    padding:10px;
+    border-radius:12px;
+    border:1px solid rgba(0,0,0,0.2);
+    background:rgba(255,255,255,0.85);
+    backdrop-filter:blur(10px);
+    width:220px;
+}
+
 /* モーダル */
 #modal {
     position:fixed;
-    width:100%; height:100%;
+    width:100%;
+    height:100%;
     display:none;
     justify-content:center;
     align-items:center;
-    background:rgba(0,0,0,0.3);
+    background:rgba(0,0,0,0.35);
+    backdrop-filter:blur(6px);
+    z-index:9999;
 }
 #modalContent {
-    background:rgba(255,255,255,0.8);
+    background:rgba(255,255,255,0.85);
     padding:20px;
     border-radius:16px;
     width:85%;
-    max-width:400px;
+    max-width:420px;
 }
 </style>
 </head>
@@ -54,6 +71,7 @@ body { margin:0; font-family:sans-serif; }
 <body>
 
 <div id="map"></div>
+<input id="searchBox" placeholder="住所検索（Enter）">
 <div id="locateBtn">現在地</div>
 <div id="infoBtn">ⓘ</div>
 
@@ -61,6 +79,7 @@ body { margin:0; font-family:sans-serif; }
   <div id="modalContent">
     <h3>免責・出典</h3>
     <p>本マップは参考情報です。最終判断は公式情報をご確認ください。</p>
+    <p>国土地理院 / 国土交通省 / DIDデータ</p>
     <button onclick="closeModal()">閉じる</button>
   </div>
 </div>
@@ -70,16 +89,14 @@ body { margin:0; font-family:sans-serif; }
 
 <script>
 
-// 地図
-var map = L.map('map').setView([35.68,139.76], 6);
+// ===== 地図 =====
+var map = L.map('map').setView([35.68,139.76], 5);
 
-// 背景地図
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
 // ===== DID =====
 var didLayer;
 
-// 全国DID読み込み
 fetch('A16-20_00_DID.json')
 .then(res => res.json())
 .then(data => {
@@ -88,9 +105,9 @@ fetch('A16-20_00_DID.json')
 
     L.geoJSON(data, {
         style: {
-            color: "#ff4d4d",
-            weight: 1,
-            fillOpacity: 0.05
+            color:"#ff4d4d",
+            weight:1,
+            fillOpacity:0.03
         }
     }).addTo(map);
 });
@@ -113,15 +130,51 @@ airportLayer.forEach(a=>{
 });
 
 // ===== 現在地 =====
+var currentMarker;
+
 document.getElementById("locateBtn").onclick = ()=>{
     map.locate({setView:true,maxZoom:15});
 };
 
 map.on('locationfound', e=>{
-    L.marker(e.latlng).addTo(map).bindPopup("現在地");
+    if(currentMarker) map.removeLayer(currentMarker);
+
+    currentMarker = L.marker(e.latlng)
+        .addTo(map)
+        .bindPopup("現在地")
+        .openPopup();
 });
 
-// ===== 判定 =====
+// ===== 判定関数 =====
+function checkFlight(lat, lon){
+
+    let point = turf.point([lon, lat]);
+
+    let inDID = false;
+    if(didLayer){
+        didLayer.features.forEach(f=>{
+            if(turf.booleanPointInPolygon(point,f)) inDID = true;
+        });
+    }
+
+    let inAirport = false;
+    airportLayer.forEach(a=>{
+        let dist = map.distance([lat,lon],[a.lat,a.lng]);
+        if(dist < a.radius) inAirport = true;
+    });
+
+    if(inDID && inAirport){
+        return {text:"飛行NG（DID＋空港）", color:"purple"};
+    } else if(inDID){
+        return {text:"飛行NG（人口集中地区）", color:"red"};
+    } else if(inAirport){
+        return {text:"飛行NG（空港周辺）", color:"orange"};
+    } else {
+        return {text:"飛行OK（規制外）", color:"green"};
+    }
+}
+
+// ===== クリック判定 =====
 var lastMarker;
 
 map.on('click', function(e){
@@ -130,44 +183,66 @@ map.on('click', function(e){
 
     if(lastMarker) map.removeLayer(lastMarker);
 
-    var point = turf.point([e.latlng.lng, e.latlng.lat]);
-
-    var inDID = false;
-    didLayer.features.forEach(f=>{
-        if(turf.booleanPointInPolygon(point,f)) inDID = true;
-    });
-
-    var inAirport = false;
-    airportLayer.forEach(a=>{
-        var dist = map.distance(e.latlng,[a.lat,a.lng]);
-        if(dist < a.radius) inAirport = true;
-    });
-
-    var text = "";
-    var color = "green";
-
-    if(inDID && inAirport){
-        text = "飛行NG（DID＋空港）";
-        color = "purple";
-    } else if(inDID){
-        text = "飛行NG（人口集中地区）";
-        color = "red";
-    } else if(inAirport){
-        text = "飛行NG（空港周辺）";
-        color = "orange";
-    } else {
-        text = "飛行OK（規制外）";
-        color = "green";
-    }
+    let result = checkFlight(e.latlng.lat, e.latlng.lng);
 
     lastMarker = L.circleMarker(e.latlng,{
         radius:8,
-        color:color,
-        fillColor:color,
+        color:result.color,
+        fillColor:result.color,
         fillOpacity:0.9
     }).addTo(map)
-      .bindPopup(text)
+      .bindPopup(result.text)
       .openPopup();
+});
+
+// ===== 住所検索（対策入り） =====
+let searchMarker;
+let lastSearchTime = 0;
+
+document.getElementById("searchBox").addEventListener("keydown", function(e){
+
+    if(e.key !== "Enter") return;
+
+    let now = Date.now();
+    if(now - lastSearchTime < 1500){
+        alert("少し待ってください");
+        return;
+    }
+    lastSearchTime = now;
+
+    let q = e.target.value;
+    if(!q) return;
+
+    fetch("https://nominatim.openstreetmap.org/search?format=json&q=" + encodeURIComponent(q))
+    .then(res => res.json())
+    .then(data => {
+
+        if(data.length === 0){
+            alert("見つかりません");
+            return;
+        }
+
+        let lat = parseFloat(data[0].lat);
+        let lon = parseFloat(data[0].lon);
+
+        map.setView([lat, lon], 15);
+
+        if(searchMarker) map.removeLayer(searchMarker);
+
+        let result = checkFlight(lat, lon);
+
+        searchMarker = L.circleMarker([lat, lon], {
+            radius:8,
+            color:result.color,
+            fillColor:result.color,
+            fillOpacity:0.9
+        }).addTo(map)
+        .bindPopup(result.text)
+        .openPopup();
+    })
+    .catch(()=>{
+        alert("検索エラー");
+    });
 });
 
 // ===== モーダル =====
@@ -178,6 +253,12 @@ document.getElementById("infoBtn").onclick = ()=>{
 function closeModal(){
     document.getElementById("modal").style.display="none";
 }
+
+document.getElementById("modal").onclick = function(e){
+    if(e.target.id === "modal"){
+        closeModal();
+    }
+};
 
 </script>
 
