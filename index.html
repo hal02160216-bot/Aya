@@ -2,83 +2,126 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Drone Map Japan</title>
+<title>ドローン飛行規制チェックマップ</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-body { margin:0; font-family:sans-serif; }
-#map { height:100vh; }
+body{
+    margin:0;
+    font-family:sans-serif;
+}
 
-/* UI */
-#infoBtn, #locateBtn {
+#map{
+    height:100vh;
+}
+
+/* ===== UI ===== */
+
+#searchBox,
+#radiusMode,
+#locateBtn{
     position:absolute;
     z-index:1000;
+
     background:rgba(255,255,255,0.9);
     backdrop-filter:blur(10px);
-    border-radius:10px;
-    border:1px solid rgba(0,0,0,0.1);
-    cursor:pointer;
-}
-#infoBtn {
-    bottom:20px; right:20px;
-    width:50px; height:50px;
-    border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:18px;
-}
-#locateBtn {
-    top:12px; right:12px;
-    padding:8px 12px;
+
+    border:1px solid rgba(0,0,0,0.15);
+    border-radius:12px;
+
+    padding:10px;
 }
 
-/* 検索 */
-#searchBox {
-    position:absolute;
+#searchBox{
     top:12px;
     left:12px;
-    z-index:1000;
-    padding:10px;
-    border-radius:12px;
-    border:1px solid rgba(0,0,0,0.2);
-    background:rgba(255,255,255,0.9);
-    backdrop-filter:blur(10px);
-    width:230px;
+    width:220px;
 }
 
-/* ===== モーダル完全対策 ===== */
-#modal {
+#radiusMode{
+    top:62px;
+    left:12px;
+}
+
+#locateBtn{
+    top:12px;
+    right:12px;
+    cursor:pointer;
+}
+
+#infoBtn{
+    position:absolute;
+    bottom:20px;
+    right:20px;
+
+    width:52px;
+    height:52px;
+
+    border-radius:50%;
+    border:none;
+
+    background:rgba(255,255,255,0.9);
+    backdrop-filter:blur(10px);
+
+    box-shadow:0 4px 16px rgba(0,0,0,0.2);
+
+    z-index:1000;
+    cursor:pointer;
+
+    font-size:20px;
+}
+
+/* ===== モーダル ===== */
+
+#modal{
     position:fixed;
-    top:0; left:0;
-    width:100%; height:100%;
+    top:0;
+    left:0;
+
+    width:100%;
+    height:100%;
 
     display:flex;
     justify-content:center;
     align-items:center;
 
-    background:rgba(0,0,0,0.4);
+    background:rgba(0,0,0,0.35);
     backdrop-filter:blur(6px);
 
     z-index:99999;
 
     opacity:0;
     pointer-events:none;
+
     transition:0.2s;
 }
 
-#modal.show {
+#modal.show{
     opacity:1;
     pointer-events:auto;
 }
 
-#modalContent {
-    background:rgba(255,255,255,0.95);
-    padding:20px;
-    border-radius:16px;
+#modalContent{
     width:85%;
     max-width:420px;
-    box-shadow:0 10px 30px rgba(0,0,0,0.3);
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:22px;
+
+    box-shadow:0 10px 30px rgba(0,0,0,0.25);
+}
+
+#modalContent button{
+    margin-top:12px;
+    padding:10px 16px;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
 }
 </style>
 </head>
@@ -86,25 +129,43 @@ body { margin:0; font-family:sans-serif; }
 <body>
 
 <div id="map"></div>
-<input id="searchBox" placeholder="住所検索（Enter）">
-<div id="locateBtn">現在地</div>
-<div id="infoBtn">ⓘ</div>
 
+<input id="searchBox" placeholder="住所検索（Enter）">
+
+<select id="radiusMode">
+    <option value="300">通常判定（300m）</option>
+    <option value="1000">厳しめ判定（1km）</option>
+</select>
+
+<div id="locateBtn">現在地</div>
+
+<button id="infoBtn">ⓘ</button>
+
+<!-- モーダル -->
 <div id="modal">
-  <div id="modalContent">
-    <h3>免責・出典</h3>
-    <p>
-      本マップは参考情報です。<br>
-      最終判断は航空法・DIPS等の公式情報をご確認ください。
-    </p>
-    <p>
-      【出典】<br>
-      ・国土地理院<br>
-      ・国土交通省 航空局<br>
-      ・国勢調査DIDデータ
-    </p>
-    <button onclick="closeModal()">閉じる</button>
-  </div>
+    <div id="modalContent">
+
+        <h3>免責・出典</h3>
+
+        <p>
+            本マップは参考情報です。<br>
+            最終判断は航空法・DIPS等の公式情報をご確認ください。
+        </p>
+
+        <p>
+            ※重要施設・原子力施設は簡易円判定です
+        </p>
+
+        <p>
+            【出典】<br>
+            ・国土地理院<br>
+            ・国土交通省 航空局<br>
+            ・国勢調査DIDデータ
+        </p>
+
+        <button onclick="closeModal()">閉じる</button>
+
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -113,21 +174,37 @@ body { margin:0; font-family:sans-serif; }
 <script>
 
 // ===== 地図 =====
-var map = L.map('map').setView([35.68,139.76], 5);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+var map = L.map('map').setView([35.68,139.76],5);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+    maxZoom:19
+}).addTo(map);
 
 // ===== DID =====
+
 var didLayer;
+
 fetch('A16-20_00_DID.json')
-.then(res => res.json())
-.then(data => {
+.then(res=>res.json())
+.then(data=>{
+
     didLayer = data;
-    L.geoJSON(data, {
-        style:{color:"#ff4d4d",weight:1,fillOpacity:0.03}
+
+    L.geoJSON(data,{
+        style:{
+            color:"#ff4d4d",
+            weight:1,
+            fillOpacity:0.03
+        }
     }).addTo(map);
+
 });
 
 // ===== 空港 =====
+
 var airportLayer = [
     {name:"羽田空港",lat:35.5494,lng:139.7798,radius:8000},
     {name:"成田空港",lat:35.7719,lng:140.3929,radius:9000},
@@ -136,99 +213,330 @@ var airportLayer = [
 ];
 
 airportLayer.forEach(a=>{
+
     L.circle([a.lat,a.lng],{
         radius:a.radius,
         color:"orange",
+        fillColor:"orange",
         fillOpacity:0.08
-    }).addTo(map).bindPopup(a.name);
+    })
+    .addTo(map)
+    .bindPopup(a.name);
+
 });
 
-// ===== 判定関数 =====
-function checkFlight(lat, lon){
-    let point = turf.point([lon, lat]);
+// ===== 重要施設 =====
 
-    let inDID = false;
-    if(didLayer){
-        didLayer.features.forEach(f=>{
-            if(turf.booleanPointInPolygon(point,f)) inDID = true;
-        });
-    }
+let baseRadius = 300;
 
-    let inAirport = false;
-    airportLayer.forEach(a=>{
-        if(map.distance([lat,lon],[a.lat,a.lng]) < a.radius){
-            inAirport = true;
-        }
+var facilityLayer = [
+
+    {name:"首相官邸",lat:35.6739,lng:139.7414,extra:100},
+    {name:"国会議事堂",lat:35.6759,lng:139.7448,extra:100},
+    {name:"皇居",lat:35.6852,lng:139.7528,extra:300}
+
+];
+
+// ===== 原子力施設 =====
+
+var nuclearLayer = [
+
+    {name:"福島第一原発",lat:37.4213,lng:141.0325,extra:500},
+    {name:"柏崎刈羽原発",lat:37.4271,lng:138.6016,extra:500},
+    {name:"東海第二原発",lat:36.4666,lng:140.6066,extra:400},
+    {name:"浜岡原発",lat:34.6229,lng:138.1430,extra:500},
+    {name:"美浜原発",lat:35.7012,lng:135.9638,extra:400},
+    {name:"大飯原発",lat:35.5395,lng:135.6525,extra:400},
+    {name:"高浜原発",lat:35.4946,lng:135.5189,extra:400},
+    {name:"志賀原発",lat:37.0603,lng:136.7220,extra:400},
+    {name:"伊方原発",lat:33.4909,lng:132.3085,extra:500},
+    {name:"玄海原発",lat:33.5110,lng:129.8375,extra:500},
+    {name:"川内原発",lat:31.8333,lng:130.1890,extra:500}
+
+];
+
+// ===== 円描画 =====
+
+let facilityCircles = [];
+
+function drawFacilityCircles(){
+
+    facilityCircles.forEach(c=>{
+        map.removeLayer(c);
     });
 
-    if(inDID && inAirport) return {text:"飛行NG（DID＋空港）",color:"purple"};
-    if(inDID) return {text:"飛行NG（人口集中地区）",color:"red"};
-    if(inAirport) return {text:"飛行NG（空港周辺）",color:"orange"};
-    return {text:"飛行OK（規制外）",color:"green"};
+    facilityCircles = [];
+
+    // 重要施設
+    facilityLayer.forEach(f=>{
+
+        let r = baseRadius + f.extra;
+
+        let c = L.circle([f.lat,f.lng],{
+            radius:r,
+            color:"blue",
+            fillColor:"blue",
+            fillOpacity:0.08
+        })
+        .addTo(map)
+        .bindPopup(f.name);
+
+        facilityCircles.push(c);
+
+    });
+
+    // 原子力施設
+    nuclearLayer.forEach(n=>{
+
+        let r = baseRadius + n.extra;
+
+        let c = L.circle([n.lat,n.lng],{
+            radius:r,
+            color:"black",
+            fillColor:"black",
+            fillOpacity:0.1
+        })
+        .addTo(map)
+        .bindPopup(n.name);
+
+        facilityCircles.push(c);
+
+    });
+
+}
+
+drawFacilityCircles();
+
+// ===== 半径切替 =====
+
+document.getElementById("radiusMode").onchange = function(){
+
+    baseRadius = parseInt(this.value);
+
+    drawFacilityCircles();
+
+};
+
+// ===== 判定 =====
+
+function checkFlight(lat,lon){
+
+    let point = turf.point([lon,lat]);
+
+    // DID
+    let inDID = false;
+
+    if(didLayer){
+
+        didLayer.features.forEach(f=>{
+
+            if(turf.booleanPointInPolygon(point,f)){
+                inDID = true;
+            }
+
+        });
+
+    }
+
+    // 空港
+    let inAirport = false;
+
+    airportLayer.forEach(a=>{
+
+        let dist = map.distance([lat,lon],[a.lat,a.lng]);
+
+        if(dist < a.radius){
+            inAirport = true;
+        }
+
+    });
+
+    // 重要施設
+    let inFacility = false;
+
+    facilityLayer.forEach(f=>{
+
+        let r = baseRadius + f.extra;
+
+        let dist = map.distance([lat,lon],[f.lat,f.lng]);
+
+        if(dist < r){
+            inFacility = true;
+        }
+
+    });
+
+    // 原子力施設
+    let inNuclear = false;
+
+    nuclearLayer.forEach(n=>{
+
+        let r = baseRadius + n.extra;
+
+        let dist = map.distance([lat,lon],[n.lat,n.lng]);
+
+        if(dist < r){
+            inNuclear = true;
+        }
+
+    });
+
+    // 優先順位
+
+    if(inNuclear){
+        return {
+            text:"飛行NG（原子力施設周辺）",
+            color:"black"
+        };
+    }
+
+    if(inFacility){
+        return {
+            text:"飛行NG（重要施設周辺）",
+            color:"blue"
+        };
+    }
+
+    if(inDID && inAirport){
+        return {
+            text:"飛行NG（DID＋空港）",
+            color:"purple"
+        };
+    }
+
+    if(inDID){
+        return {
+            text:"飛行NG（人口集中地区）",
+            color:"red"
+        };
+    }
+
+    if(inAirport){
+        return {
+            text:"飛行NG（空港周辺）",
+            color:"orange"
+        };
+    }
+
+    return {
+        text:"飛行OK（規制外）",
+        color:"green"
+    };
+
 }
 
 // ===== クリック判定 =====
+
 let lastMarker;
-map.on('click', e=>{
-    if(!didLayer) return;
 
-    if(lastMarker) map.removeLayer(lastMarker);
+map.on('click',e=>{
 
-    let r = checkFlight(e.latlng.lat, e.latlng.lng);
+    if(lastMarker){
+        map.removeLayer(lastMarker);
+    }
+
+    let r = checkFlight(e.latlng.lat,e.latlng.lng);
 
     lastMarker = L.circleMarker(e.latlng,{
-        radius:8,color:r.color,fillColor:r.color,fillOpacity:0.9
-    }).addTo(map).bindPopup(r.text).openPopup();
+        radius:8,
+        color:r.color,
+        fillColor:r.color,
+        fillOpacity:0.9
+    })
+    .addTo(map)
+    .bindPopup(r.text)
+    .openPopup();
+
 });
 
 // ===== 現在地 =====
+
 let currentMarker;
+
 document.getElementById("locateBtn").onclick = ()=>{
-    map.locate({setView:true,maxZoom:15});
+
+    map.locate({
+        setView:true,
+        maxZoom:15
+    });
+
 };
-map.on('locationfound', e=>{
-    if(currentMarker) map.removeLayer(currentMarker);
-    currentMarker = L.marker(e.latlng).addTo(map).bindPopup("現在地").openPopup();
+
+map.on('locationfound',e=>{
+
+    if(currentMarker){
+        map.removeLayer(currentMarker);
+    }
+
+    currentMarker = L.marker(e.latlng)
+    .addTo(map)
+    .bindPopup("現在地")
+    .openPopup();
+
 });
 
-// ===== 検索（制限付き） =====
+// ===== 住所検索 =====
+
 let searchMarker;
 let lastSearchTime = 0;
 
-document.getElementById("searchBox").addEventListener("keydown", e=>{
+document.getElementById("searchBox")
+.addEventListener("keydown",e=>{
+
     if(e.key !== "Enter") return;
 
     let now = Date.now();
+
     if(now - lastSearchTime < 1500){
         alert("少し待ってください");
         return;
     }
+
     lastSearchTime = now;
 
     let q = e.target.value;
+
     if(!q) return;
 
-    fetch("https://nominatim.openstreetmap.org/search?format=json&q="+encodeURIComponent(q))
+    fetch(
+        "https://nominatim.openstreetmap.org/search?format=json&q="
+        + encodeURIComponent(q)
+    )
     .then(r=>r.json())
-    .then(d=>{
-        if(!d.length) return alert("見つかりません");
+    .then(data=>{
 
-        let lat = parseFloat(d[0].lat);
-        let lon = parseFloat(d[0].lon);
+        if(!data.length){
+            alert("見つかりません");
+            return;
+        }
+
+        let lat = parseFloat(data[0].lat);
+        let lon = parseFloat(data[0].lon);
 
         map.setView([lat,lon],15);
 
-        if(searchMarker) map.removeLayer(searchMarker);
+        if(searchMarker){
+            map.removeLayer(searchMarker);
+        }
 
         let r = checkFlight(lat,lon);
 
         searchMarker = L.circleMarker([lat,lon],{
-            radius:8,color:r.color,fillColor:r.color,fillOpacity:0.9
-        }).addTo(map).bindPopup(r.text).openPopup();
+            radius:8,
+            color:r.color,
+            fillColor:r.color,
+            fillOpacity:0.9
+        })
+        .addTo(map)
+        .bindPopup(r.text)
+        .openPopup();
+
     });
+
 });
 
-// ===== モーダル（完全安定） =====
+// ===== モーダル =====
+
 const modal = document.getElementById("modal");
 
 document.getElementById("infoBtn").onclick = ()=>{
@@ -239,7 +547,6 @@ function closeModal(){
     modal.classList.remove("show");
 }
 
-// 背景クリックで閉じる
 modal.onclick = (e)=>{
     if(e.target === modal){
         closeModal();
